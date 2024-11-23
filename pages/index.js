@@ -1,237 +1,513 @@
 import Head from "next/head";
-import Image from "next/image";
-import localFont from "next/font/local";
-import styles from "@/styles/Home.module.css";
+import WordGame from '../components/WordGame';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 
-// Add a keyframes style at the top of your component
-const jiggleKeyframes = `
-  @keyframes jiggle {
-    0% { transform: translateY(0px); }
-    25% { transform: translateY(-2px); }
-    75% { transform: translateY(2px); }
-    100% { transform: translateY(0px); }
-  }
+const calculateInitialLives = (answerLength) => {
+  // More generous formula for longer answers:
+  // - 3 hearts minimum
+  // - Add 1 heart for every 12 words (instead of 8)
+  // - Cap at 8 hearts maximum (instead of 10)
+  const baseLives = Math.floor(answerLength / 12) + 3;
+  return Math.min(Math.max(baseLives, 3), 8);
+};
 
-  @keyframes heartFade {
-    0% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0; transform: scale(1.2); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-
-  @keyframes correctFlash {
-    0% { background-color: #FFFFFF; color: #000000; }
-    50% { background-color: #00AA00; color: #FFFFFF; }
-    100% { background-color: #FFFFFF; color: #000000; }
-  }
-
-  @keyframes incorrectFlash {
-    0% { background-color: #FFFFFF; color: #000000; }
-    50% { background-color: #AA0000; color: #FFFFFF; }
-    100% { background-color: #FFFFFF; color: #000000; }
+const fallingKeyframes = `
+  @keyframes falling {
+    from { top: 20px; }
+    to { top: calc(100vh - 20px); }
   }
 `;
 
-// Add at the top with other imports and before the component
-const playDamageSound = () => {
-  const audio = new Audio('/damage.mp3');
-  audio.play().catch(e => console.log('Audio play failed:', e));
-};
+// Add a unique ID generator
+const generateUniqueId = () => `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+// Add sound function
 const playDeathSound = () => {
   const audio = new Audio('/horse_death.mp3');
   audio.play().catch(e => console.log('Audio play failed:', e));
 };
 
-// Update the timer duration function
-const getTimerDuration = (wordIndex) => {
-  const baseDuration = 2500; // Start with 2.5 seconds
-  const minDuration = 1000;  // Don't go lower than 1 second
-  const reductionPerWord = 100; // Reduce by 0.1 seconds per word
+// Add function to calculate distance from cursor to game container
+const getDistanceFromCursor = (gameRect, cursorX, cursorY) => {
+  // Get center point of game container
+  const centerX = gameRect.left + (gameRect.width / 2);
+  const centerY = gameRect.top + (gameRect.height / 2);
   
-  const newDuration = baseDuration - (wordIndex * reductionPerWord);
-  return Math.max(newDuration, minDuration); // Don't go below minimum duration
+  // Calculate distance
+  return Math.sqrt(
+    Math.pow(cursorX - centerX, 2) + 
+    Math.pow(cursorY - centerY, 2)
+  );
 };
 
 export default function Home() {
-  const [mistakes, setMistakes] = useState(0);
-  const [selectedWords, setSelectedWords] = useState([]);
-  const [currentChoices, setCurrentChoices] = useState([]);
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [wordStatuses, setWordStatuses] = useState([]);
-  const [progress, setProgress] = useState(0);
-  const [timerActive, setTimerActive] = useState(true);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [lives, setLives] = useState(5);
+  const [activeGames, setActiveGames] = useState([]);
+  const [gameCounter, setGameCounter] = useState(0);
+  const [completedQuestions, setCompletedQuestions] = useState([]);
+  const [usedPositions, setUsedPositions] = useState([]);
   const [isGameOver, setIsGameOver] = useState(false);
-  const [showTip, setShowTip] = useState(true);
-  const [lastClicked, setLastClicked] = useState(null);
-  const [wasCorrect, setWasCorrect] = useState(null);
+  const [selectedGameId, setSelectedGameId] = useState(null);
+  const [numberOfDeaths, setNumberOfDeaths] = useState(0);
+  const [hasGameStarted, setHasGameStarted] = useState(false);
 
   const questions = [
     {
-      question: "what type of lemon is the sweetest?",
-      answer: "Meyer lemons are generally considered the sweetest variety of lemons, as they are actually a hybrid between a regular lemon and a mandarin orange."
+      question: "What shocking survival story involves the Shiba Inu breed?",
+      answer: "During World War II, the Shiba Inu nearly went extinct! Only three bloodlines survived the widespread devastation, and all modern Shibas descend from these survivors."
+    },
+    {
+      question: "What bizarre genetic trait makes Shiba Inus different from other dogs?", 
+      answer: "Shiba Inus are one of the few dog breeds that possess a unique genetic makeup closest to wolves, making them one of the most ancient dog breeds in the world!"
+    },
+    {
+      question: "What strange cleaning habit makes Shiba Inus cat-like?",
+      answer: "Shiba Inus obsessively clean themselves like cats! They're known to lick their paws and body, and even wipe their face with their paws just like felines."
+    },
+    {
+      question: "What incredible physical feat can Shiba Inus perform?",
+      answer: "Shiba Inus can climb trees and jump to extraordinary heights! Some have been recorded jumping over 6-foot fences from a standing position."
+    },
+    {
+      question: "What unbelievable price did the most expensive Shiba Inu sell for?",
+      answer: "In 2016, a rare cream-colored Shiba Inu puppy sold for over $280,000 in China, making it one of the most expensive dog sales ever recorded!"
+    },
+    {
+      question: "What unique vocal characteristic do Shiba Inus have?",
+      answer: "Shiba Inus are known for making a unique 'Shiba scream' - a high-pitched vocal sound they make when excited, unhappy, or surprised that sounds remarkably like human screaming!"
+    },
+    {
+      question: "What surprising historical role did Shiba Inus play in ancient Japan?",
+      answer: "Shiba Inus were originally bred as hunting dogs in mountainous regions of Japan, skilled at flushing out small game and even wild boar despite their relatively small size!"
+    },
+    {
+      question: "What unusual color variation exists in Shiba Inus that many don't know about?",
+      answer: "While rare, some Shiba Inus are born with a unique 'cream' or 'white' coat color called 'urajiro', which was historically considered sacred in Japanese culture!"
+    },
+    {
+      question: "What extraordinary sense do Shiba Inus possess?",
+      answer: "Shiba Inus have an incredibly acute sense of direction, with many reported cases of them finding their way home from miles away, even in unfamiliar territory!"
+    },
+    {
+      question: "What unique personality trait earned Shiba Inus a special nickname?",
+      answer: "Shiba Inus are often called the 'Drama Queens' of the dog world due to their theatrical reactions and expressions, especially when they don't get their way!"
+    },
+    {
+      question: "What surprising weather adaptation do Shiba Inus have?",
+      answer: "Shiba Inus have a special double coat that's naturally water-repellent and can withstand extreme temperatures from -20°F to 120°F (-29°C to 49°C)!"
+    },
+    {
+      question: "What unique hunting technique sets Shiba Inus apart?",
+      answer: "Shiba Inus use a distinctive 'pouncing' technique when hunting, similar to foxes, where they jump high and dive nose-first into snow or tall grass to catch prey!"
+    },
+    {
+      question: "What unexpected skill makes Shiba Inus excellent in emergencies?",
+      answer: "Shiba Inus have been known to alert their owners to earthquakes before they happen, sensing the subtle vibrations that humans can't detect!"
+    },
+    {
+      question: "What bizarre sleeping habit do Shiba Inus have?",
+      answer: "Many Shiba Inus sleep on their backs with all four legs in the air, a position called the 'Shiba 500' that shows their complete trust in their environment!"
+    },
+    {
+      question: "What surprising athletic record does a Shiba Inu hold?",
+      answer: "A Shiba Inu named Mojo holds the record for the fastest dog to pop 100 balloons, completing the task in just 39.08 seconds!"
+    },
+    {
+      question: "What unique cultural significance do Shiba Inus have in Japan?",
+      answer: "Shiba Inus are considered a national treasure in Japan and are protected by the Nihon Ken Hozonkai organization, which preserves Japanese dog breeds!"
+    },
+    {
+      question: "What unexpected talent do many Shiba Inus possess?",
+      answer: "Many Shiba Inus show an uncanny ability to solve puzzle toys and food dispensers, with some even learning to open doors and refrigerators!"
+    },
+    {
+      question: "What strange genetic anomaly can occur in Shiba Inus?",
+      answer: "Some Shiba Inus possess a rare genetic trait called 'long coat,' producing fur twice the normal length, though this isn't recognized as breed standard!"
+    },
+    {
+      question: "What unique social media achievement involves a Shiba Inu?",
+      answer: "A Shiba Inu named Kabosu became one of the most famous dogs in internet history as the face of the 'Doge' meme, later inspiring the cryptocurrency Dogecoin!"
+    },
+    {
+      question: "What surprising rescue ability do Shiba Inus have?",
+      answer: "Shiba Inus have been successfully trained as search and rescue dogs, using their keen sense of smell and agility to navigate difficult mountain terrain!"
+    },
+    {
+      question: "What unique dental characteristic do Shiba Inus possess?",
+      answer: "Shiba Inus often retain their puppy teeth longer than other breeds, sometimes having two rows of teeth temporarily, earning them the nickname 'shark mouth'!"
+    },
+    {
+      question: "What unexpected farming role did Shiba Inus historically play?",
+      answer: "In ancient Japan, Shiba Inus were used to protect rice fields from birds, using their agility and intelligence to chase away crop-destroying pests!"
+    },
+    {
+      question: "What strange phenomenon affects many Shiba Inus twice a year?",
+      answer: "Shiba Inus undergo an extreme molting process called 'blowing coat' twice yearly, where they shed their entire undercoat in just a few days!"
+    },
+    {
+      question: "What unique architectural feature exists for Shiba Inus in Japan?",
+      answer: "Some Japanese homes feature special 'Shiba windows' - low windows at dog height that allow Shiba Inus to watch the street while staying safely indoors!"
+    },
+    {
+      question: "What surprising longevity record does a Shiba Inu hold?",
+      answer: "The oldest documented Shiba Inu lived to be 26 years old, making it one of the longest-living dogs ever recorded!"
+    },
+    {
+      question: "What unique marking do all purebred Shiba Inus share?",
+      answer: "All purebred Shiba Inus have a special spiral pattern in their tail fur, visible when the tail is viewed from the end, called a 'fish-scale pattern'!"
+    },
+    {
+      question: "What unexpected swimming ability do Shiba Inus possess?",
+      answer: "Despite their cat-like nature, Shiba Inus are naturally excellent swimmers, with some even participating in dock diving competitions!"
+    },
+    {
+      question: "What unique seasonal change occurs in Shiba Inus?",
+      answer: "Shiba Inus' coat colors can change dramatically with the seasons, becoming brighter in winter and more muted in summer, a trait called seasonal color variation!"
+    },
+    {
+      question: "What surprising military role did Shiba Inus have?",
+      answer: "During the Russo-Japanese War, Shiba Inus were used as messenger dogs, carrying vital communications through mountainous terrain!"
+    },
+    {
+      question: "What unique breeding restriction exists for Shiba Inus in Japan?",
+      answer: "In Japan, breeding Shiba Inus requires a special license, and each puppy must be inspected by the Japanese Kennel Club to maintain breed purity!"
+    },
+    {
+      question: "What unexpected artistic tribute features Shiba Inus?",
+      answer: "Ancient Japanese woodblock prints from the Edo period often featured Shiba Inus, making them one of the earliest dog breeds documented in art!"
+    },
+    {
+      question: "What strange superstition involves Shiba Inus in Japanese culture?",
+      answer: "In some parts of Japan, it's believed that a Shiba Inu's counter-clockwise tail curl brings good luck, while a clockwise curl warns of coming challenges!"
+    },
+    {
+      question: "What unique television achievement involves a Shiba Inu?",
+      answer: "A Shiba Inu named Mari starred in a Japanese drama series 'Mari and Her Three Puppies', based on a true story of surviving a major earthquake!"
+    },
+    {
+      question: "What surprising medical detection ability do some Shiba Inus have?",
+      answer: "Some Shiba Inus have been trained to detect early signs of cancer through scent, with accuracy rates comparable to specialized medical equipment!"
+    },
+    {
+      question: "What unique gardening behavior do Shiba Inus exhibit?",
+      answer: "Many Shiba Inus instinctively avoid stepping on plants and garden beds, a trait believed to come from their historical role in protecting crops!"
+    },
+    {
+      question: "What unexpected weather prediction ability do Shiba Inus show?",
+      answer: "Many Shiba owners report their dogs can predict incoming storms hours before they arrive, showing distinct behavioral changes as barometric pressure drops!"
+    },
+    {
+      question: "What unique genetic advantage gives Shiba Inus excellent night vision?",
+      answer: "Shiba Inus have a special reflective layer in their eyes called tapetum lucidum that's more developed than in most dogs, giving them superior night vision!"
+    },
+    {
+      question: "What surprising diplomatic role did Shiba Inus play?",
+      answer: "In the 1950s, Shiba Inus were given as diplomatic gifts from Japan to other nations, helping establish the breed internationally!"
+    },
+    {
+      question: "What unique cognitive ability do Shiba Inus demonstrate?",
+      answer: "Studies have shown Shiba Inus can recognize and remember human faces for years, even after brief encounters, showing remarkable long-term memory!"
+    },
+    {
+      question: "What strange hibernation-like behavior do some Shiba Inus exhibit?",
+      answer: "During extremely cold weather, some Shiba Inus enter a state of reduced activity called 'winter rest,' sleeping up to 20 hours a day while maintaining normal health!"
+    },
+    {
+      question: "What unique postal service involves Shiba Inus in Japan?",
+      answer: "In some rural Japanese towns, Shiba Inus participate in a special mail delivery service, carrying packages to elderly residents in mountainous areas!"
+    },
+    {
+      question: "What surprising archaeological discovery involves Shiba Inus?",
+      answer: "Archaeological digs in Japan have uncovered Shiba Inu remains dating back over 9,000 years, making them one of the oldest documented dog breeds!"
+    },
+    {
+      question: "What unique adaptation helps Shiba Inus survive in mountains?",
+      answer: "Shiba Inus have specially adapted paw pads that can temporarily harden in cold conditions, allowing them to walk on snow and ice without discomfort!"
+    },
+    {
+      question: "What unexpected healing ability do Shiba Inus possess?",
+      answer: "Shiba Inus have remarkably fast healing abilities, with wounds and injuries typically healing 20-30% faster than in other dog breeds!"
+    },
+    {
+      question: "What strange magnetic sensitivity do Shiba Inus demonstrate?",
+      answer: "Research suggests Shiba Inus can sense Earth's magnetic field and prefer to align themselves north-south when relieving themselves!"
+    },
+    {
+      question: "What unique festival celebrates Shiba Inus in Japan?",
+      answer: "The annual Shiba Inu Festival in Tokyo draws thousands of visitors, featuring Shiba fashion shows, agility contests, and historical reenactments!"
+    },
+    {
+      question: "What surprising space connection does a Shiba Inu have?",
+      answer: "A Shiba Inu's pawprint was sent to Mars on NASA's Perseverance rover as part of a global signature collection, making it the first dog breed represented on Mars!"
+    },
+    {
+      question: "What unique mathematical pattern appears in Shiba Inu fur?",
+      answer: "The spiral pattern in a Shiba Inu's tail fur follows the Fibonacci sequence, a mathematical pattern found in nature that creates perfect spirals!"
+    },
+    {
+      question: "What unexpected world record does a Shiba Inu hold?",
+      answer: "A Shiba Inu named Yuki holds the world record for the most tricks performed in one minute, completing 28 distinct commands in 60 seconds!"
+    },
+    {
+      question: "What strange evolutionary advantage do Shiba Inus have?",
+      answer: "Shiba Inus have unusually flexible spines that allow them to turn their bodies 180 degrees while running, a trait that helped them hunt in dense mountain forests!"
+    },
+    {
+      question: "What unique contribution did Shiba Inus make to modern dog training?",
+      answer: "The 'Shiba shake-off' method of stress relief was first observed in Shiba Inus and is now taught as a calming technique for all dog breeds!"
+    },
+    {
+      question: "What surprising economic impact have Shiba Inus had?",
+      answer: "The 'Shiba Inu effect' in Japan refers to the breed's influence on the pet industry, generating over $2.5 billion annually in related products and services!"
     }
   ];
 
   const words = [
-    "the", "be", "to", "of", "and", "a", "in", "that",
-    "have", "I", "it", "for", "not", "on", "with", "he",
-    "as", "you", "do", "at", "this", "but", "his", "by",
-    "from", "they", "we", "say", "her", "she", "or", "an",
-    "will", "my", "one", "all", "would", "there", "their", "what",
-    "so", "up", "out", "if", "about", "who", "get", "which",
-    "go", "me", "when", "make", "can", "like", "time", "no",
-    "just", "him", "know", "take", "people", "into", "year", "your",
-    "good", "some", "could", "them", "see", "other", "than", "then",
-    "now", "look", "only", "come", "its", "over", "think", "also",
-    "back", "after", "use", "two", "how", "our", "work", "first",
-    "well", "way", "even", "new", "want", "because", "any", "these",
-    "give", "day", "most", "us", "is", "was", "are", "were"
+    "the", "be", "to", "of", "and", "a", "in", "that", "have", "I", "it", "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me"
   ];
 
-  const shuffleArray = (array) => {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
+  // Add function to find safe position
+  const findSafePosition = () => {
+    const gameWidth = 300; // Width of game container + some padding
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const possiblePosition = Math.random() * (screenWidth - gameWidth);
+
+    // Check if this position overlaps with any existing games
+    const isSafe = !usedPositions.some(pos => 
+      Math.abs(pos - possiblePosition) < gameWidth
+    );
+
+    return isSafe ? possiblePosition : findSafePosition();
   };
 
-  const updateChoices = () => {
-    const currentAnswer = questions[0].answer.toLowerCase().split(" ");
-    const correctWord = currentAnswer[currentWordIndex];
-    
-    // Get random words from the words array that aren't the correct word
-    const wrongWords = shuffleArray(words
-      .filter(word => word.toLowerCase() !== correctWord))
-      .slice(0, 2);
-    
-    // Combine correct word with wrong words and shuffle
-    const choices = shuffleArray([correctWord, ...wrongWords]);
-    setCurrentChoices(choices);
-  };
-
-  // Update choices when currentWordIndex changes
-  useEffect(() => {
-    if (currentWordIndex < questions[0].answer.split(" ").length) {
-      updateChoices();
-    }
-  }, [currentWordIndex]);
-
-  // Initial choices setup
-  useEffect(() => {
-    updateChoices();
-  }, []);
-
-  // Update the timer effect to use dynamic duration
-  useEffect(() => {
-    if (!gameStarted || !timerActive || currentWordIndex >= questions[0].answer.split(" ").length || isGameOver) return;
-
-    const startTime = Date.now();
-    const duration = getTimerDuration(currentWordIndex);
-
-    const timer = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const current = Math.min(100, (elapsed / duration) * 100);
+  // Add function to check if game has hit bottom
+  const checkBottomCollision = (gameId) => {
+    const element = document.getElementById(`game-${gameId}`);
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
       
-      if (current === 100) {
-        const currentAnswer = questions[0].answer.toLowerCase().split(" ");
-        setSelectedWords([...selectedWords, currentAnswer[currentWordIndex]]);
-        setWordStatuses([...wordStatuses, 'incorrect']);
-        const newLives = lives - 1;
-        setLives(newLives);
-        playDamageSound();
-        
-        if (newLives <= 0) {
-          setIsGameOver(true);
-          playDeathSound();
-        }
-        
-        setCurrentWordIndex(currentWordIndex + 1);
-        setProgress(0);
-      } else {
-        setProgress(current);
+      if (rect.bottom >= windowHeight) {
+        handleGameDeath(gameId);
       }
-    }, 16);
+    }
+  };
 
-    return () => clearInterval(timer);
-  }, [timerActive, currentWordIndex, gameStarted, isGameOver]);
-
-  // Reset progress when moving to next word
-  useEffect(() => {
-    setProgress(0);
-  }, [currentWordIndex]);
-
-  // Modify handleWordSelect to start the game on first selection
-  const handleWordSelect = (word, index) => {
-    if (isGameOver) return;
-    
-    const currentAnswer = questions[0].answer.toLowerCase().split(" ");
-    const isCorrect = word.toLowerCase() === currentAnswer[currentWordIndex];
-    
-    setLastClicked(index);
-    setWasCorrect(isCorrect);
-    
-    // Reset animation states after animation completes
-    setTimeout(() => {
-      setLastClicked(null);
-      setWasCorrect(null);
-    }, 300);
-
-    if (isCorrect) {
-      setSelectedWords([...selectedWords, word]);
-      setWordStatuses([...wordStatuses, 'correct']);
-    } else {
-      const newLives = lives - 1;
-      setLives(newLives);
-      playDamageSound();
-      setSelectedWords([...selectedWords, currentAnswer[currentWordIndex]]);
-      setWordStatuses([...wordStatuses, 'incorrect']);
-      
-      if (newLives <= 0) {
+  // Add function to handle game death
+  const handleGameDeath = (gameId) => {
+    playDeathSound(); // Add death sound when hitting bottom
+    setNumberOfDeaths(prev => {
+      const newCount = prev + 1;
+      if (newCount >= 5) {
         setIsGameOver(true);
-        playDeathSound();
+        return 5; // Cap at 5
       }
-    }
-    
-    setCurrentWordIndex(currentWordIndex + 1);
-    setProgress(0);
-    
-    if (!gameStarted) {
-      setGameStarted(true);
-    }
+      return newCount;
+    });
+    handleGameComplete(gameId);
   };
 
-  const getWordColor = (index) => {
-    if (wordStatuses[index] === 'correct') return '#00AA00';
-    if (wordStatuses[index] === 'incorrect') return '#AA0000';
-    return '#FFFFFF';
-  };
-
-  // Add keyboard event listener
+  // Modify initial game spawn to use random question
   useEffect(() => {
-    const handleKeyPress = (event) => {
-      if (currentWordIndex >= questions[0].answer.split(" ").length) return;
-      
-      const key = event.key;
-      if (key === "1" || key === "2" || key === "3") {
-        const index = parseInt(key) - 1;
-        if (index < currentChoices.length) {
-          handleWordSelect(currentChoices[index], index);
-          setShowTip(false);
+    if (completedQuestions.length === questions.length) {
+      setIsGameOver(true);
+      return;
+    }
+
+    // Start first game immediately
+    if (gameCounter === 0 && activeGames.length === 0) {
+      const randomIndex = Math.floor(Math.random() * questions.length);
+      const firstPosition = findSafePosition();
+      setUsedPositions([firstPosition]);
+      const firstGame = {
+        id: generateUniqueId(),
+        question: questions[randomIndex],
+        startPosition: firstPosition,
+        fallDuration: 60000,
+        isFirst: true,
+        questionIndex: randomIndex,
+        initialLives: calculateInitialLives(questions[randomIndex].answer.split(" ").length)
+      };
+      setActiveGames([firstGame]);
+      setGameCounter(1);
+      setCompletedQuestions([]);
+    }
+
+    const addGameInterval = setInterval(() => {
+      if (completedQuestions.length < questions.length) {
+        if (activeGames.length < 2) {
+          // Check if we're already creating this question
+          const availableQuestions = questions.filter(q => 
+            !completedQuestions.includes(q) && 
+            !activeGames.some(game => game.question === q) &&
+            q !== questions[0]
+          );
+
+          if (availableQuestions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+            const newQuestion = availableQuestions[randomIndex];
+            const newPosition = findSafePosition();
+            
+            setActiveGames(prev => {
+              // Double check we're not already creating this game
+              if (prev.some(game => game.question === newQuestion)) {
+                return prev;
+              }
+
+              const calculatedLives = calculateInitialLives(newQuestion.answer.split(" ").length);
+              const newGame = {
+                id: generateUniqueId(),
+                question: newQuestion,
+                startPosition: newPosition,
+                fallDuration: 60000,
+                questionIndex: questions.indexOf(newQuestion),
+                initialLives: calculatedLives
+              };
+              
+              return [...prev, newGame];
+            });
+            setGameCounter(prev => prev + 1);
+          }
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(addGameInterval);
+  }, [gameCounter, activeGames.length, completedQuestions.length]);
+
+  // Add collision detection interval
+  useEffect(() => {
+    if (isGameOver) return;
+
+    const collisionInterval = setInterval(() => {
+      activeGames.forEach(game => {
+        checkBottomCollision(game.id);
+      });
+    }, 100); // Check every 100ms
+
+    return () => clearInterval(collisionInterval);
+  }, [activeGames, isGameOver]);
+
+  // Update handleGameComplete to use the new ID system
+  const handleGameComplete = (gameId) => {
+    setActiveGames(prev => {
+      const completedGame = prev.find(game => game.id === gameId);
+      if (completedGame) {
+        setCompletedQuestions(prev => {
+          const newCompleted = [...prev, completedGame.question];
+          if (newCompleted.length === questions.length && numberOfDeaths < 5) {
+            setIsGameOver(true);
+          }
+          return newCompleted;
+        });
+        setUsedPositions(positions => 
+          positions.filter(pos => pos !== completedGame.startPosition)
+        );
+      }
+
+      // Remove the completed game
+      const newGames = prev.filter(game => game.id !== gameId);
+
+      // If we've hit death limit, clear all games
+      if (numberOfDeaths >= 5) {
+        return [];
+      }
+
+      // Immediately create a new game if we're below the limit and have available questions
+      if (newGames.length === 0 && completedQuestions.length < questions.length - 1) {
+        const availableQuestions = questions.filter(q => 
+          !completedQuestions.includes(q) && 
+          !newGames.some(game => game.question === q)
+        );
+
+        if (availableQuestions.length > 0) {
+          const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+          const newQuestion = availableQuestions[randomIndex];
+          const newPosition = findSafePosition();
+          
+          // Immediately add new game
+          const newGame = {
+            id: generateUniqueId(),
+            question: newQuestion,
+            startPosition: newPosition,
+            fallDuration: 60000,
+            questionIndex: questions.indexOf(newQuestion),
+            initialLives: calculateInitialLives(newQuestion.answer.split(" ").length)
+          };
+          
+          // Set selected game ID to the new game
+          setSelectedGameId(newGame.id);
+          
+          return [newGame];
+        }
+      }
+
+      return newGames;
+    });
+  };
+
+  // Check for game over whenever deaths change
+  useEffect(() => {
+    if (numberOfDeaths >= 5) {
+      setIsGameOver(true);
+    }
+  }, [numberOfDeaths]);
+
+  // Update the game container to handle cursor proximity
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      // If already hovering a game, don't change selection
+      const hoveredGame = activeGames.find(game => {
+        const element = document.getElementById(`game-${game.id}`);
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        return (
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom
+        );
+      });
+
+      if (hoveredGame) {
+        setSelectedGameId(hoveredGame.id);
+        return;
+      }
+
+      // If no direct hover and no current selection, find closest game
+      if (!selectedGameId) {
+        let closestGame = null;
+        let closestDistance = Infinity;
+
+        activeGames.forEach(game => {
+          const element = document.getElementById(`game-${game.id}`);
+          if (!element) return;
+          
+          const rect = element.getBoundingClientRect();
+          const distance = getDistanceFromCursor(rect, e.clientX, e.clientY);
+          
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestGame = game;
+          }
+        });
+
+        if (closestGame) {
+          setSelectedGameId(closestGame.id);
         }
       }
     };
 
-    window.addEventListener("keydown", handleKeyPress);
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [activeGames, selectedGameId]);
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyPress);
-    };
-  }, [currentChoices, currentWordIndex]);
+  // Add effect to clear selection when game is removed
+  useEffect(() => {
+    if (selectedGameId && !activeGames.some(game => game.id === selectedGameId)) {
+      setSelectedGameId(null);
+    }
+  }, [activeGames, selectedGameId]);
 
   return (
     <>
@@ -240,167 +516,138 @@ export default function Home() {
         <meta name="description" content="you become a doge LLM. embrace the chaos" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
-        <style>{jiggleKeyframes}</style>
+        <style>{fallingKeyframes}</style>
       </Head>
-      <div>
+      {!hasGameStarted ? (
         <div style={{
-          padding: 8, 
-          border: isGameOver ? "2px solid #AA0000" : "1px solid #AAAAAA", 
-          display: 'flex', 
-          flexDirection: "column", 
-          width: "250px",
-          wordWrap: "break-word",
-          wordBreak: "break-word",
-          transition: 'border 0.3s ease',
-          position: 'relative',
-          backgroundColor: '#FFFFFF',
-          boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.2)',
-          imageRendering: 'pixelated'
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: '#000000',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          color: '#FFAA00',
+          textAlign: 'center'
         }}>
-          <p style={{ margin: '4px 0' }}>{questions[0].question}</p>
-          <div style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap',
-            gap: '4px',
-            marginBottom: '8px'
-          }}>
-            {selectedWords.map((word, index) => (
-              <span key={index} style={{ 
-                color: getWordColor(index),
-              }}>
-                {word}
-              </span>
-            ))}
+          <div style={{ maxWidth: '600px', marginBottom: '40px' }}>
+            <h1 style={{ fontSize: '32px', marginBottom: '20px' }}>
+              Welcome to Doge LLM!
+            </h1>
+            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px' }}>
+              You are DOGE LLM and "users" will come to you with questions.
+              Your task is to pick the most logical next word in your response to form coherent sentences.
+            </p>
+            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px' }}>
+              Use number keys 1-3 or click to select words.
+              Complete answers before they reach the bottom!
+            </p>
           </div>
-          {currentWordIndex < questions[0].answer.split(" ").length && currentChoices.map((word, index) => (
-            <button 
-              key={index} 
-              onClick={() => handleWordSelect(word, index)}
-              disabled={isGameOver}
-              style={{
-                marginBottom: '4px',
-                padding: '4px 8px',
-                wordBreak: 'break-word',
-                textAlign: 'left',
-                width: '100%',
-                display: 'block',
-                opacity: isGameOver ? 0.5 : 1,
-                cursor: isGameOver ? 'not-allowed' : 'pointer',
-                backgroundColor: isGameOver ? '#555555' : '#FFFFFF',
-                color: isGameOver ? '#AAAAAA' : '#000000',
-                border: '1px solid #AAAAAA',
-                position: 'relative',
-                boxShadow: isGameOver ? 'none' : '2px 2px 0px rgba(0, 0, 0, 0.2)',
-                imageRendering: 'pixelated',
-                animation: lastClicked === index ? 
-                  (wasCorrect ? 'correctFlash 0.3s forwards' : 'incorrectFlash 0.3s forwards') : 
-                  'none'
-              }}
-            >
-              [{index + 1}] {word.charAt(0).toUpperCase() + word.slice(1)} 
-            </button>
-          ))}
-          {currentWordIndex === questions[0].answer.split(" ").length ? (
-            <p style={{ margin: '4px 0' }}>Completed with {lives} hearts remaining!</p>
-          ) : (
-            <>
-              {gameStarted && !isGameOver && (
-                <div style={{
-                  width: '100%',
-                  height: '4px',
-                  backgroundColor: '#555555',
-                  marginBottom: '8px',
-                  borderRadius: '2px'
-                }}>
-                  <div 
-                    style={{
-                      width: `${progress}%`,
-                      height: '100%',
-                      backgroundColor: progress > 70 ? '#AA0000' : '#00AA00',
-                      transition: 'width 50ms linear',
-                      borderRadius: '2px'
-                    }}
-                  />
-                </div>
-              )}
-            </>
+          <button 
+            onClick={() => setHasGameStarted(true)}
+            style={{
+              padding: '12px 24px',
+              fontSize: '24px',
+              backgroundColor: '#00AA00',
+              color: '#FFFFFF',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.2)',
+              transition: 'transform 0.1s ease',
+              fontFamily: 'Minecraft',
+              ':hover': {
+                transform: 'scale(1.05)'
+              }
+            }}
+          >
+            Start Game
+          </button>
+        </div>
+      ) : (
+        <>
+          {!isGameOver && (
+            <div style={{
+              position: 'fixed',
+              top: '20px',
+              left: '20px',
+              fontSize: '24px',
+              color: '#FFAA00',
+              zIndex: 1000,
+              textShadow: '2px 2px #000000'
+            }}>
+              Deaths: {numberOfDeaths}/5
+            </div>
           )}
-          
-          {/* Hearts moved to bottom with jiggle animation */}
-          <div style={{
-            display: 'flex',
-            gap: '4px',
-            marginTop: '12px',
-            marginBottom: '8px',
-            justifyContent: 'flex-start',
-            paddingLeft: '4px'
+          <div style={{ 
+            position: 'relative',
+            width: '100vw',
+            height: '100vh',
+            overflow: 'hidden',
+            backgroundColor: isGameOver ? '#000000' : 'transparent',
+            transition: 'background-color 0.3s ease'
           }}>
-            {[...Array(5)].map((_, index) => (
-              <div key={index} style={{
-                imageRendering: 'pixelated',
-                width: '20px',
-                height: '20px',
-                position: 'relative',
-                animation: gameStarted && progress > 0 ? 'jiggle 0.3s infinite' : 'none',
+            {isGameOver ? (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: '32px',
+                color: '#FFAA00',
+                textAlign: 'center'
               }}>
-                {/* Filled heart */}
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '20px',
-                  height: '20px',
-                  opacity: index < lives ? 1 : 0,
-                  animation: index === lives ? 'heartFade 0.5s forwards' : 'none',
-                }}>
+                <div style={{ marginBottom: '40px' }}>
                   <Image
-                    src="/Heart_filled.webp"
-                    alt="Life remaining"
-                    width={20}
-                    height={20}
+                    src="/doge-bonk.gif"
+                    alt="Doge Bonk"
+                    width={400}
+                    height={200}
                     style={{
                       imageRendering: 'pixelated',
-                      width: '100%',
-                      height: '100%'
                     }}
                   />
                 </div>
-                {/* Unfilled heart */}
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '20px',
-                  height: '20px',
-                  opacity: index < lives ? 0 : 1,
-                  animation: index === lives ? 'heartFade 0.5s forwards' : 'none',
-                }}>
-                  <Image
-                    src="/Heart_unfilled.webp"
-                    alt="Life lost"
-                    width={20}
-                    height={20}
-                    style={{
-                      imageRendering: 'pixelated',
-                      width: '100%',
-                      height: '100%'
-                    }}
-                  />
+                <div>Game Over!</div>
+                <div style={{ fontSize: '24px', marginTop: '20px' }}>
+                  Deaths: {numberOfDeaths}/5
                 </div>
               </div>
-            ))}
+            ) : (
+              activeGames.map((game) => (
+                <div
+                  key={game.id}
+                  style={{
+                    position: 'absolute',
+                    left: game.startPosition,
+                    top: game.isFirst ? '20px' : '-100%',
+                    animation: `falling ${game.fallDuration}ms linear`,
+                    animationFillMode: 'forwards',
+                    zIndex: selectedGameId === game.id ? 10 : 1
+                  }}
+                >
+                  <WordGame 
+                    question={game.question.question}
+                    answer={game.question.answer}
+                    words={words}
+                    onComplete={() => handleGameComplete(game.id)}
+                    onTimeout={() => handleGameComplete(game.id)}
+                    initialLives={game.initialLives}
+                    gameId={game.id}
+                    isSelected={selectedGameId === game.id}
+                    onSelect={() => setSelectedGameId(game.id)}
+                    numberOfDeaths={numberOfDeaths}
+                    setNumberOfDeaths={setNumberOfDeaths}
+                  />
+                </div>
+              ))
+            )}
           </div>
-
-          {showTip && (
-            <p style={{
-              fontSize: '12px', 
-              color: '#AAAAAA',
-              margin: '4px 0',
-              textAlign: 'center'
-            }}>Tip: Use keys 1, 2, or 3 to select quickly!</p>
-          )}
-        </div>
-      </div>
+        </>
+      )}
     </>
   );
 }
