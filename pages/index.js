@@ -41,6 +41,51 @@ const getDistanceFromCursor = (gameRect, cursorX, cursorY) => {
   );
 };
 
+// Add this near the top with other constants
+const minecraftColors = [
+  '#AA0000', // Dark Red
+  '#FF5555', // Red
+  '#FFAA00', // Gold
+  '#FFFF55', // Yellow
+  '#00AA00', // Dark Green
+  '#55FF55', // Green
+  '#55FFFF', // Aqua
+  '#00AAAA', // Dark Aqua
+  '#0000AA', // Dark Blue
+  '#5555FF', // Blue
+  '#FF55FF', // Light Purple
+  '#AA00AA', // Dark Purple
+];
+
+const RainbowText = ({ text }) => {
+  const [colorOffset, setColorOffset] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setColorOffset(prev => (prev + 1) % text.length);
+    }, 100); // Made it faster for smoother wave effect
+
+    return () => clearInterval(interval);
+  }, [text.length]);
+
+  return (
+    <h1 style={{ fontSize: '32px', marginBottom: '20px' }}>
+      {text.split('').map((char, index) => (
+        <span
+          key={index}
+          style={{
+            color: minecraftColors[
+              ((index - colorOffset + text.length) % text.length) % minecraftColors.length
+            ]
+          }}
+        >
+          {char}
+        </span>
+      ))}
+    </h1>
+  );
+};
+
 export default function Home() {
   const [activeGames, setActiveGames] = useState([]);
   const [gameCounter, setGameCounter] = useState(0);
@@ -535,14 +580,23 @@ export default function Home() {
           textAlign: 'center'
         }}>
           <div style={{ maxWidth: '600px', marginBottom: '40px' }}>
-            <h1 style={{ fontSize: '32px', marginBottom: '20px' }}>
-              Welcome to Doge LLM!
-            </h1>
-            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px' }}>
+            <div style={{ marginBottom: '40px' }}>
+              <Image
+                src="/doge-fighter.gif"
+                alt="Doge Fighter"
+                width={250}
+                height={200}
+                style={{
+                  imageRendering: 'pixelated',
+                }}
+              />
+            </div>
+            <RainbowText text="Welcome to Doge LLM!" />
+            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px', color: '#FFFFFF' }}>
               You are DOGE LLM and "users" will come to you with questions.
               Your task is to pick the most logical next word in your response to form coherent sentences.
             </p>
-            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px' }}>
+            <p style={{ fontSize: '18px', lineHeight: '1.5', marginBottom: '20px', color: '#FFFFFF' }}>
               Use number keys 1-3 or click to select words.
               Complete answers before they reach the bottom!
             </p>
