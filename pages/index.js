@@ -86,6 +86,21 @@ const RainbowText = ({ text }) => {
   );
 };
 
+// Add this near the top with other constants
+const playBonkLoop = () => {
+  const audio = new Audio('/bonk.mp3');
+  audio.loop = true;
+  return audio;
+};
+
+// Add this function after handleGameComplete
+const selectNextAvailableGame = () => {
+  if (activeGames.length > 0) {
+    const nextGame = activeGames[0]; // Select the first available game
+    setSelectedGameId(nextGame.id);
+  }
+};
+
 export default function Home() {
   const [activeGames, setActiveGames] = useState([]);
   const [gameCounter, setGameCounter] = useState(0);
@@ -95,6 +110,7 @@ export default function Home() {
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [numberOfDeaths, setNumberOfDeaths] = useState(0);
   const [hasGameStarted, setHasGameStarted] = useState(false);
+  const [gameOverSound, setGameOverSound] = useState(null);
 
   const questions = [
     {
@@ -433,7 +449,7 @@ export default function Home() {
     return () => clearInterval(collisionInterval);
   }, [activeGames, isGameOver]);
 
-  // Update handleGameComplete to use the new ID system
+  // Modify handleGameComplete to include the selection of next game
   const handleGameComplete = (gameId) => {
     setActiveGames(prev => {
       const completedGame = prev.find(game => game.id === gameId);
@@ -485,6 +501,11 @@ export default function Home() {
           
           return [newGame];
         }
+      }
+
+      // Select next available game if there are any
+      if (newGames.length > 0) {
+        setSelectedGameId(newGames[0].id);
       }
 
       return newGames;
@@ -554,6 +575,37 @@ export default function Home() {
     }
   }, [activeGames, selectedGameId]);
 
+  // Add this effect near your other useEffects
+  useEffect(() => {
+    if (!hasGameStarted) {
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter') {
+          setHasGameStarted(true);
+        }
+      };
+
+      window.addEventListener('keypress', handleKeyPress);
+      return () => window.removeEventListener('keypress', handleKeyPress);
+    }
+  }, [hasGameStarted]);
+
+  // Add this effect to handle the game over sound
+  useEffect(() => {
+    if (isGameOver && !gameOverSound) {
+      const sound = playBonkLoop();
+      sound.play().catch(e => console.log('Audio play failed:', e));
+      setGameOverSound(sound);
+    }
+
+    // Cleanup function to stop the sound when component unmounts
+    return () => {
+      if (gameOverSound) {
+        gameOverSound.pause();
+        gameOverSound.currentTime = 0;
+      }
+    };
+  }, [isGameOver]);
+
   return (
     <>
       <Head>
@@ -601,25 +653,35 @@ export default function Home() {
               Complete answers before they reach the bottom!
             </p>
           </div>
-          <button 
-            onClick={() => setHasGameStarted(true)}
-            style={{
-              padding: '12px 24px',
-              fontSize: '24px',
-              backgroundColor: '#00AA00',
-              color: '#FFFFFF',
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.2)',
-              transition: 'transform 0.1s ease',
-              fontFamily: 'Minecraft',
-              ':hover': {
-                transform: 'scale(1.05)'
-              }
-            }}
-          >
-            Start Game
-          </button>
+          <div>
+            <button 
+              onClick={() => setHasGameStarted(true)}
+              style={{
+                padding: '12px 24px',
+                fontSize: '24px',
+                backgroundColor: '#00AA00',
+                color: '#FFFFFF',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.2)',
+                transition: 'transform 0.1s ease',
+                fontFamily: 'Minecraft',
+                ':hover': {
+                  transform: 'scale(1.05)'
+                }
+              }}
+            >
+              Start Game
+            </button>
+            <p style={{ 
+              fontSize: '14px', 
+              color: '#FFFFFF', 
+              marginTop: '10px',
+              opacity: 0.8 
+            }}>
+              Press Enter to start
+            </p>
+          </div>
         </div>
       ) : (
         <>
@@ -656,7 +718,7 @@ export default function Home() {
               }}>
                 <div style={{ marginBottom: '40px' }}>
                   <Image
-                    src="/doge-bonk.gif"
+                    src="/bonk2.gif"
                     alt="Doge Bonk"
                     width={400}
                     height={200}
@@ -669,6 +731,31 @@ export default function Home() {
                 <div style={{ fontSize: '24px', marginTop: '20px' }}>
                   Deaths: {numberOfDeaths}/5
                 </div>
+                <button
+                  onClick={() => {
+                    if (gameOverSound) {
+                      gameOverSound.pause();
+                      gameOverSound.currentTime = 0;
+                    }
+                    setGameOverSound(null);
+                    setIsGameOver(false);
+                    setNumberOfDeaths(0);
+                    setCompletedQuestions([]);
+                    setActiveGames([]);
+                    setGameCounter(0);
+                  }}
+                  style={{
+                    marginTop: '20px',
+                    padding: '10px 20px',
+                    fontSize: '20px',
+                    backgroundColor: '#00AA00',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Try Again
+                </button>
               </div>
             ) : (
               activeGames.map((game) => (

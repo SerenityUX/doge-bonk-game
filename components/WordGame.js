@@ -156,6 +156,7 @@ export default function WordGame({
       
       if (currentWordIndex === currentAnswer.length - 1) {
         playWinSound();
+        onComplete?.();
       }
     } else {
       const newLives = lives - 1;
@@ -178,10 +179,6 @@ export default function WordGame({
     
     if (!gameStarted) {
       setGameStarted(true);
-    }
-
-    if (currentWordIndex + 1 === answer.split(" ").length) {
-      onComplete?.();
     }
   };
 
@@ -236,6 +233,7 @@ export default function WordGame({
           setIsGameOver(true);
           playDeathSound();
           setNumberOfDeaths(prev => prev + 1);
+          onTimeout?.();
         }
         
         setCurrentWordIndex(currentWordIndex + 1);
