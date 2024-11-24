@@ -101,6 +101,13 @@ const selectNextAvailableGame = () => {
   }
 };
 
+// Add this near the top with other constants
+const playStartSound = () => {
+  const audio = new Audio('/minecraft_song.mp3');
+  audio.volume = 1.0; 
+  audio.play().catch(e => console.log('Audio play failed:', e));
+};
+
 export default function Home() {
   const [activeGames, setActiveGames] = useState([]);
   const [gameCounter, setGameCounter] = useState(0);
@@ -111,6 +118,7 @@ export default function Home() {
   const [numberOfDeaths, setNumberOfDeaths] = useState(0);
   const [hasGameStarted, setHasGameStarted] = useState(false);
   const [gameOverSound, setGameOverSound] = useState(null);
+  const [numberOfGoldenHearts, setNumberOfGoldenHearts] = useState(0);
 
   const questions = [
     {
@@ -449,11 +457,17 @@ export default function Home() {
     return () => clearInterval(collisionInterval);
   }, [activeGames, isGameOver]);
 
-  // Modify handleGameComplete to include the selection of next game
+  // Modify handleGameComplete to track golden hearts
   const handleGameComplete = (gameId) => {
     setActiveGames(prev => {
       const completedGame = prev.find(game => game.id === gameId);
       if (completedGame) {
+        // Add remaining lives to golden hearts when game completes successfully
+        const gameElement = document.getElementById(`game-${gameId}`);
+        if (gameElement && gameElement.remainingLives) {
+          setNumberOfGoldenHearts(prev => prev + gameElement.remainingLives);
+        }
+
         setCompletedQuestions(prev => {
           const newCompleted = [...prev, completedGame.question];
           if (newCompleted.length === questions.length && numberOfDeaths < 5) {
@@ -580,6 +594,7 @@ export default function Home() {
     if (!hasGameStarted) {
       const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
+          playStartSound();
           setHasGameStarted(true);
         }
       };
@@ -655,7 +670,10 @@ export default function Home() {
           </div>
           <div>
             <button 
-              onClick={() => setHasGameStarted(true)}
+              onClick={() => {
+                playStartSound();
+                setHasGameStarted(true);
+              }}
               style={{
                 padding: '12px 24px',
                 fontSize: '24px',
@@ -695,7 +713,26 @@ export default function Home() {
               zIndex: 1000,
               textShadow: '2px 2px #000000'
             }}>
-              Deaths: {numberOfDeaths}/3
+              <div>Deaths: {numberOfDeaths}/3</div>
+              <div style={{ fontSize: '24px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+               
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {[...Array(numberOfGoldenHearts)].map((_, index) => (
+                    <Image
+                      key={index}
+                      src="/golden_heart.png"
+                      alt="Golden Heart"
+                      width={24}
+                      height={24}
+                      style={{
+                        imageRendering: 'pixelated',
+                        width: '24px',
+                        height: '24px'
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           <div style={{ 
@@ -727,9 +764,28 @@ export default function Home() {
                     }}
                   />
                 </div>
-                <div>Game Over!</div>
-                <div style={{ fontSize: '24px', marginTop: '20px' }}>
+                <div>You Died!</div>
+                {/* <div style={{ fontSize: '24px', marginTop: '20px' }}>
                   Deaths: {numberOfDeaths}/3
+                </div> */}
+                <div style={{ fontSize: '24px', justifyContent: "center", marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {[...Array(numberOfGoldenHearts)].map((_, index) => (
+                      <Image
+                        key={index}
+                        src="/golden_heart.png"
+                        alt="Golden Heart"
+                        width={24}
+                        height={24}
+                        style={{
+                          imageRendering: 'pixelated',
+                          width: '24px',
+                          height: '24px'
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
                 <button
                   onClick={() => {

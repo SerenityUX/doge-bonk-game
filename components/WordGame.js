@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Image from "next/image";
 
 // Move all the animations and sound functions outside the component
@@ -57,6 +57,13 @@ const getTimerDuration = (wordIndex) => {
   const newDuration = baseDuration - (wordIndex * reductionPerWord);
   return Math.max(newDuration, minDuration);
 };
+
+function playHurtSound() {
+    const sounds = ['/damage.mp3', '/dog_hurt.mp3'];
+    const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+    const audio = new Audio(randomSound);
+    audio.play();
+}
 
 export default function WordGame({ 
   question, 
@@ -156,12 +163,16 @@ export default function WordGame({
       
       if (currentWordIndex === currentAnswer.length - 1) {
         playWinSound();
+        const element = document.getElementById(`game-${gameId}`);
+        if (element) {
+          element.remainingLives = lives;
+        }
         onComplete?.();
       }
     } else {
       const newLives = lives - 1;
       setLives(newLives);
-      playDamageSound();
+      playHurtSound();
       setSelectedWords([...selectedWords, currentAnswer[currentWordIndex]]);
       setWordStatuses([...wordStatuses, 'incorrect']);
       
@@ -227,7 +238,7 @@ export default function WordGame({
         setWordStatuses([...wordStatuses, 'incorrect']);
         const newLives = lives - 1;
         setLives(newLives);
-        playDamageSound();
+        playHurtSound();
         
         if (newLives <= 0) {
           setIsGameOver(true);
