@@ -470,7 +470,7 @@ export default function Home() {
       const newGames = prev.filter(game => game.id !== gameId);
 
       // If we've hit death limit, clear all games
-      if (numberOfDeaths >= 5) {
+      if (numberOfDeaths >= 3) {
         return [];
       }
 
@@ -514,7 +514,7 @@ export default function Home() {
 
   // Check for game over whenever deaths change
   useEffect(() => {
-    if (numberOfDeaths >= 5) {
+    if (numberOfDeaths >= 3) {
       setIsGameOver(true);
     }
   }, [numberOfDeaths]);
@@ -695,7 +695,7 @@ export default function Home() {
               zIndex: 1000,
               textShadow: '2px 2px #000000'
             }}>
-              Deaths: {numberOfDeaths}/5
+              Deaths: {numberOfDeaths}/3
             </div>
           )}
           <div style={{ 
@@ -729,7 +729,7 @@ export default function Home() {
                 </div>
                 <div>Game Over!</div>
                 <div style={{ fontSize: '24px', marginTop: '20px' }}>
-                  Deaths: {numberOfDeaths}/5
+                  Deaths: {numberOfDeaths}/3
                 </div>
                 <button
                   onClick={() => {
