@@ -392,7 +392,7 @@ export default function Home() {
         id: generateUniqueId(),
         question: questions[randomIndex],
         startPosition: firstPosition,
-        fallDuration: 60000,
+        fallDuration: 180000,
         isFirst: true,
         questionIndex: randomIndex,
         initialLives: calculateInitialLives(questions[randomIndex].answer.split(" ").length)
@@ -428,7 +428,7 @@ export default function Home() {
                 id: generateUniqueId(),
                 question: newQuestion,
                 startPosition: newPosition,
-                fallDuration: 60000,
+                fallDuration: 180000,
                 questionIndex: questions.indexOf(newQuestion),
                 initialLives: calculatedLives
               };
@@ -505,7 +505,7 @@ export default function Home() {
             id: generateUniqueId(),
             question: newQuestion,
             startPosition: newPosition,
-            fallDuration: 60000,
+            fallDuration: 180000,
             questionIndex: questions.indexOf(newQuestion),
             initialLives: calculateInitialLives(newQuestion.answer.split(" ").length)
           };
