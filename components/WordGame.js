@@ -50,7 +50,7 @@ const playXPSound = () => {
 };
 
 const getTimerDuration = (wordIndex) => {
-  const baseDuration = 7500;
+  const baseDuration = 6000;
   const minDuration = 2500;
   const reductionPerWord = 500;
   
