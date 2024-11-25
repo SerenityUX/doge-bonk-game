@@ -52,7 +52,7 @@ const playXPSound = () => {
 const getTimerDuration = (wordIndex) => {
   const baseDuration = 7500;
   const minDuration = 2500;
-  const reductionPerWord = 300;
+  const reductionPerWord = 500;
   
   const newDuration = baseDuration - (wordIndex * reductionPerWord);
   return Math.max(newDuration, minDuration);
